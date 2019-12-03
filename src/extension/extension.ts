@@ -51,7 +51,6 @@ import { HotReloadOnSaveHandler } from "./flutter/hot_reload_save_handler";
 import { LspAnalyzerStatusReporter } from "./lsp/analyzer_status_reporter";
 import { LspClosingLabelsDecorations } from "./lsp/closing_labels_decorations";
 import { LspGoToSuperCommand } from "./lsp/go_to_super";
-import { initLSP, lspClient } from "./lsp/setup";
 import { AssistCodeActionProvider } from "./providers/assist_code_action_provider";
 import { DartCompletionItemProvider } from "./providers/dart_completion_item_provider";
 import { DartDiagnosticProvider } from "./providers/dart_diagnostic_provider";
@@ -189,18 +188,14 @@ export async function activate(context: vs.ExtensionContext, isRestart: boolean 
 	}
 
 	if (config.previewLsp || process.env.DART_CODE_FORCE_LSP) {
-		context.subscriptions.push(initLSP(logger, sdks, dartCapabilities));
 		isUsingLsp = true;
-	}
-
-	if (isUsingLsp) {
-		context.subscriptions.push(new LspClosingLabelsDecorations(lspClient));
 	}
 
 	// Fire up the analyzer process.
 	const analyzerStartTime = new Date();
-	analyzer = isUsingLsp ? new LspAnalyzer(lspClient) : new DasAnalyzer(logger, analytics, sdks, dartCapabilities);
+	analyzer = isUsingLsp ? new LspAnalyzer(logger, sdks, dartCapabilities) : new DasAnalyzer(logger, analytics, sdks, dartCapabilities);
 	const dasClient = isUsingLsp ? undefined : (analyzer as DasAnalyzer).client;
+	const lspClient = dasClient ? undefined : (analyzer as LspAnalyzer).client;
 	context.subscriptions.push(analyzer);
 
 	analyzer.onReady.then(() => {
@@ -225,6 +220,9 @@ export async function activate(context: vs.ExtensionContext, isRestart: boolean 
 
 	// Set up providers.
 	// TODO: Do we need to push all these to subscriptions?!
+
+	if (lspClient)
+		context.subscriptions.push(new LspClosingLabelsDecorations(lspClient));
 
 	const completionItemProvider = isUsingLsp || !dasClient ? undefined : new DartCompletionItemProvider(logger, dasClient);
 	const referenceProvider = isUsingLsp || !dasClient ? undefined : new DartReferenceProvider(dasClient);
@@ -292,9 +290,14 @@ export async function activate(context: vs.ExtensionContext, isRestart: boolean 
 	context.subscriptions.push(vs.languages.registerCompletionItemProvider(DART_MODE, new SnippetCompletionItemProvider("snippets/flutter.json", (uri) => util.isInsideFlutterProject(uri))));
 
 	context.subscriptions.push(vs.languages.setLanguageConfiguration(DART_MODE.language, new DartLanguageConfiguration()));
-	const statusReporter = isUsingLsp || !dasClient
-		? new LspAnalyzerStatusReporter(lspClient)
-		: new AnalyzerStatusReporter(logger, dasClient, workspaceContext, analytics);
+
+	// TODO: Push the differences into the Analyzer classes so we can have one reporter.
+	if (lspClient)
+		// tslint:disable-next-line: no-unused-expression
+		new LspAnalyzerStatusReporter(lspClient);
+	if (dasClient)
+		// tslint:disable-next-line: no-unused-expression
+		new AnalyzerStatusReporter(logger, dasClient, workspaceContext, analytics);
 
 	// Set up diagnostics.
 	if (!isUsingLsp && dasClient) {
@@ -417,7 +420,7 @@ export async function activate(context: vs.ExtensionContext, isRestart: boolean 
 
 	// Set up commands for Dart editors.
 	context.subscriptions.push(new EditCommands());
-	if (!isUsingLsp && dasClient) {
+	if (dasClient) {
 		context.subscriptions.push(new DasEditCommands(logger, context, dasClient));
 		context.subscriptions.push(new RefactorCommands(logger, context, dasClient));
 
@@ -427,7 +430,8 @@ export async function activate(context: vs.ExtensionContext, isRestart: boolean 
 		context.subscriptions.push(new LoggingCommands(logger, context.logPath));
 		context.subscriptions.push(new OpenInOtherEditorCommands(logger, sdks));
 		context.subscriptions.push(new TestCommands(logger));
-	} else {
+	}
+	if (lspClient) {
 		context.subscriptions.push(new LspGoToSuperCommand(lspClient));
 		// TODO: LSP equivs of the others...
 	}

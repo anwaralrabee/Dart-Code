@@ -1,9 +1,8 @@
 import * as vs from "vscode";
 import { LanguageClient } from "vscode-languageclient";
+import { showCode } from "../../shared/vscode/utils";
 import * as editors from "../editors";
-import { showCode } from "../utils/vscode/editor";
 import { SuperRequest } from "./custom_protocol";
-import { lspClient } from "./setup";
 
 export class LspGoToSuperCommand implements vs.Disposable {
 	private disposables: vs.Disposable[] = [];
@@ -22,15 +21,15 @@ export class LspGoToSuperCommand implements vs.Disposable {
 		const location = await this.analyzer.sendRequest(
 			SuperRequest.type,
 			{
-				position: lspClient.code2ProtocolConverter.asPosition(editor.selection.start),
-				textDocument: lspClient.code2ProtocolConverter.asVersionedTextDocumentIdentifier(editor.document),
+				position: this.analyzer.code2ProtocolConverter.asPosition(editor.selection.start),
+				textDocument: this.analyzer.code2ProtocolConverter.asVersionedTextDocumentIdentifier(editor.document),
 			},
 		);
 
 		if (!location)
 			return;
 
-		const codeLocation = lspClient.protocol2CodeConverter.asLocation(location);
+		const codeLocation = this.analyzer.protocol2CodeConverter.asLocation(location);
 		const elementDocument = await vs.workspace.openTextDocument(codeLocation.uri);
 		const elementEditor = await vs.window.showTextDocument(elementDocument);
 		showCode(elementEditor, codeLocation.range, codeLocation.range, codeLocation.range);

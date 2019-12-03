@@ -2,7 +2,6 @@ import * as vs from "vscode";
 import { LanguageClient } from "vscode-languageclient";
 import { fsPath } from "../../shared/vscode/utils";
 import { ClosingLabelsParams, PublishClosingLabelsNotification } from "./custom_protocol";
-import { lspClient } from "./setup";
 
 export class LspClosingLabelsDecorations implements vs.Disposable {
 	private subscriptions: vs.Disposable[] = [];
@@ -54,7 +53,7 @@ export class LspClosingLabelsDecorations implements vs.Disposable {
 
 		const decorations: { [key: number]: vs.DecorationOptions & { renderOptions: { after: {} } } } = [];
 		for (const r of this.closingLabels[filePath].labels) {
-			const range = lspClient.protocol2CodeConverter.asRange(r.range);
+			const range = this.analyzer.protocol2CodeConverter.asRange(r.range);
 			const finalCharacterRange =
 				range.end.character > 0
 					? new vs.Range(
